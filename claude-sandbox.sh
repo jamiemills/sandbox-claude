@@ -11,6 +11,8 @@
 
 ADC_SOURCE=$HOME/.config/gcloud/application_default_credentials.json
 ADC_IN_CONTAINER=$HOME/c9h/code/.application_default_credentials.json
+SSH_SOURCE=$HOME/.ssh
+SSH_IN_CONTAINER=/root/.ssh
 
 docker sandbox run \
 -e CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX} \
@@ -18,6 +20,7 @@ docker sandbox run \
 -e ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID} \
 -e GOOGLE_APPLICATION_CREDENTIALS=${ADC_IN_CONTAINER}  \
 -v ${ADC_SOURCE}:${ADC_IN_CONTAINER}:ro \
+-v ${SSH_SOURCE}:${SSH_IN_CONTAINER}:ro \
 claude --model ${MODEL}
 
 exit
