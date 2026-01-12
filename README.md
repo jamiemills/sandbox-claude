@@ -12,7 +12,8 @@ Claude Sandbox encapsulates Claude Code and its dependencies in a Docker contain
 - **Session persistence** — Named containers resume where you left off
 - **Credential isolation** — Read-only mounting of sensitive credentials (Google Cloud, SSH keys)
 - **Smart mount strategy** — Automatically detects git repositories and mounts intelligently
-- **Secure SSH for git** — SSH keys mounted read-only; no passphrases required
+- **SSH agent relay** — Use password-protected SSH keys securely in containers without exposing passphrases
+- **Secure SSH for git** — SSH keys mounted read-only with optional passphrase support via relay
 - **State preservation** — Claude memory and todo lists persist across sessions
 - **Non-root execution** — Runs as unprivileged user for enhanced security
 - **Health checks** — Built-in container health verification
@@ -73,8 +74,55 @@ The script automatically:
 - Mounts your project at an appropriate location
 - Forwards SSH credentials for git operations
 - Passes Google Cloud credentials for Vertex AI access
+- Connects to the SSH agent relay (if running) for passphrase-protected keys
 - Resumes previous sessions or starts a new one
 - Sets the editor to vim
+
+### Using SSH Keys with Passphrases (SSH Agent Relay)
+
+If your SSH key has a passphrase, you can use it in containers without removing the passphrase:
+
+**One-time setup per session:**
+
+1. Start the SSH agent relay in a tmux session:
+   ```bash
+   tmux new-session -d -s ssh-relay './start-ssh-agent-relay.sh'
+   ```
+   The relay script automatically caches your passphrase and starts the relay on port 6010.
+
+2. Start Claude Code normally:
+   ```bash
+   MODEL=haiku ./claude-sandbox.sh
+   ```
+
+Inside the container, SSH operations work without prompting for a passphrase:
+```bash
+ssh -T git@github.com
+git clone git@github.com:user/repo.git
+```
+
+**How it works:** Your passphrase is cached on the host machine (never enters the container). The relay bridges your host's ssh-agent to the container via TCP, allowing containers to request signed operations without ever seeing the passphrase.
+
+**Manage the relay:**
+```bash
+# View relay output
+tmux attach -t ssh-relay
+
+# Detach without stopping the relay (Ctrl+B then D)
+
+# Stop the relay when done
+tmux kill-session -t ssh-relay
+```
+
+**Optional: Auto-start relay in Ghostty**
+
+If you use Ghostty, you can auto-start the relay when opening a new terminal by adding this to `~/.config/ghostty/config`:
+
+```ini
+initial-command = tmux new-session -d -s ssh-relay '/path/to/sandbox-claude/start-ssh-agent-relay.sh'
+```
+
+Replace `/path/to/sandbox-claude` with the actual path to your repository. This starts the relay automatically in each new terminal session.
 
 ### Using Podman Instead of Docker
 
@@ -130,7 +178,13 @@ Credentials are securely mounted with careful attention to read/write permission
 
 **Note on ADC path:** Google Cloud credentials mount within your workspace. In a git repository, that's `<repo-name>/.config/gcloud/...`; outside a repository, it's `workspace/.config/gcloud/...`. The `GOOGLE_APPLICATION_CREDENTIALS` environment variable is automatically set to point to the correct location.
 
-**Note on SSH keys:** Individual SSH key files from `~/.ssh` are mounted read-only into the container. SSH keys with passphrases will not work in containers (no TTY for passphrase prompts). Remove your SSH key's passphrase before using with containers: `ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<passphrase>"`. A clean SSH config is generated in the container for GitHub connectivity. This works for both Docker and Podman.
+**Note on SSH keys:** Individual SSH key files from `~/.ssh` are mounted read-only into the container.
+
+**Passphrase-protected keys:** If your SSH key has a passphrase, use the SSH agent relay to access it securely in containers (see "Using SSH Keys with Passphrases" in Quick Start). The relay caches your passphrase on the host and bridges access to the container via TCP, so the passphrase never enters the container.
+
+**Passphrase-free keys:** If you prefer not to use the relay, you can remove your SSH key's passphrase: `ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<passphrase>"`.
+
+A clean SSH config is automatically generated in the container for GitHub connectivity. This works for both Docker and Podman.
 
 **Note on git configuration:** Your host's `~/.gitconfig` is mounted read-only, ensuring your git user identity (name and email) is available for commits without risk of accidental modification.
 
@@ -188,6 +242,7 @@ The Docker image includes:
 - **Vim** — Text editor (default)
 - **curl & wget** — HTTP clients
 - **tmux** — Terminal multiplexing (pre-installed)
+- **socat** — Socket relay utility (for SSH agent relay functionality)
 
 The container aliases `pip` to `uv pip` for Python package management.
 
@@ -260,6 +315,7 @@ sandbox-claude/
 ├── README.md                         # User-facing documentation (this file)
 ├── CLAUDE.md                         # AI assistant guidelines and development notes
 ├── claude-sandbox.sh                 # Main entry point script (executable)
+├── start-ssh-agent-relay.sh          # SSH agent relay script for passphrase-protected keys
 ├── docker/
 │   └── Dockerfile                   # Container image definition with all dependencies
 ├── .claude/
@@ -272,7 +328,8 @@ sandbox-claude/
 
 **Key Files:**
 - `claude-sandbox.sh` — The main script you run; handles container lifecycle and mount strategy
-- `Dockerfile` — Defines the container image with Node.js, Python, Git, GitHub CLI, and Claude Code
+- `start-ssh-agent-relay.sh` — Optional relay script to support passphrase-protected SSH keys in containers
+- `Dockerfile` — Defines the container image with Node.js, Python, Git, GitHub CLI, Claude Code, and socat
 - `CLAUDE.md` — Contains guidelines for AI assistants working on this project
 - `settings.local.json` — Explicitly allows certain commands (Docker, GitHub, gcloud) for Claude Code security
 
@@ -300,11 +357,26 @@ ls -la ~/.ssh
 
 ### SSH authentication fails inside container
 
-SSH keys with passphrases will not work in containers because there's no TTY for passphrase prompts.
+**For passphrase-protected keys:**
 
-**Solution: Remove your SSH key's passphrase**
+Use the SSH agent relay to securely use password-protected keys in containers:
 
-On your host machine:
+```bash
+# On host: Start relay in tmux (caches passphrase automatically)
+tmux new-session -d -s ssh-relay './start-ssh-agent-relay.sh'
+
+# Start container (relay provides SSH agent access)
+MODEL=haiku ./claude-sandbox.sh
+
+# Inside container: SSH works without passphrase prompt
+ssh -T git@github.com
+```
+
+See "Using SSH Keys with Passphrases (SSH Agent Relay)" in Quick Start for more details.
+
+**For passphrase-free keys:**
+
+If you prefer not to use the relay, remove your SSH key's passphrase:
 
 ```bash
 ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<your_current_passphrase>"
@@ -314,7 +386,7 @@ Replace:
 - `~/.ssh/id_ed25519` with your key path (e.g., `~/.ssh/id_rsa`)
 - `<your_current_passphrase>` with your actual passphrase
 
-Then inside the container, verify SSH is working:
+Then verify inside the container:
 
 ```bash
 # Inside container
