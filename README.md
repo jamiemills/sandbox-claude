@@ -21,7 +21,7 @@ Claude Sandbox encapsulates Claude Code and its dependencies in a Docker contain
 
 ### Prerequisites
 
-- Docker (with Daemon running) or Podman
+- **Docker** (with Daemon running) or **Podman 4.4+** (for SSH agent forwarding support)
 - Bash shell
 - Google Application Default Credentials (optional, for Vertex AI)
 - SSH keys configured for GitHub (optional, for git operations)
@@ -83,6 +83,8 @@ To use Podman as your container runtime:
 ```bash
 MODEL=haiku CONTAINER_RUNTIME=podman ./claude-sandbox.sh
 ```
+
+**SSH Agent Forwarding:** Podman 4.4+ uses native SSH agent forwarding via the `--ssh=default` flag. This works transparently on macOS (including Podman Desktop and Lima) and automatically forwards your SSH agent into the container without socket mounting issues. Git operations requiring SSH authentication (e.g., `git clone git@github.com:...`) work seamlessly inside the container.
 
 ## How It Works
 
