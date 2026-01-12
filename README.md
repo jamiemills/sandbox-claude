@@ -113,12 +113,64 @@ The Docker image includes:
 - **Node.js 20.x** — JavaScript runtime
 - **Python 3** — Python runtime with uv
 - **Git** — Version control with GitHub CLI
+- **GitHub CLI** (`gh`) — GitHub command-line interface
 - **SSH client** — Secure shell access (pre-configured for GitHub)
 - **Vim** — Text editor (default)
 - **curl & wget** — HTTP clients
 - **tmux** — Terminal multiplexing (pre-installed)
 
 The container aliases `pip` to `uv pip` for Python package management.
+
+### GitHub CLI (gh) Configuration
+
+The container includes GitHub CLI (`gh`) with pre-configured SSH authentication. Your host's gh configuration is automatically mounted into the container for persistence.
+
+#### Setup
+
+Create a `.env` file with your GitHub token (one-time setup):
+
+```bash
+cat > ~/.claude/.env << 'EOF'
+# GitHub token for gh CLI API access
+export GH_TOKEN=$(gh auth token)
+EOF
+chmod 600 ~/.claude/.env
+```
+
+The script automatically sources `~/.claude/.env` before starting the container, passing the token securely without exposing it in process listings.
+
+#### How It Works
+
+- Your `~/.config/gh` directory is mounted read-write into the container
+- SSH authentication is forwarded from your host's SSH agent for git operations
+- GitHub token is passed via environment variable for API access
+- Configuration persists across container restarts
+
+#### Using gh in the Container
+
+```bash
+# Inside container
+gh repo list
+gh pr create --title "My PR"
+gh issue list
+gh repo clone owner/repo
+```
+
+All gh commands work seamlessly using your host's authentication and configuration.
+
+#### Troubleshooting
+
+If gh commands fail:
+
+```bash
+# Check gh auth status in container
+gh auth status
+
+# Check SSH authentication
+ssh -T git@github.com
+```
+
+Both should work without prompts.
 
 ## Directory Structure
 

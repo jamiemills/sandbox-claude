@@ -3,11 +3,16 @@
 #
 # Run the specialist Docker Sandbox command to wrap Claude. See https://docs.docker.com/ai/sandboxes/
 #
-# This will 
+# This will
 # - use Google Application Default Credentials / Google Vertex to access the models (depends on /Users/jamie.mills/c9h/code/sandbox-claude/.config/gcloud/application_default_credentials.json being available)
 # - use Haiku as the model
 # - Run claude with --continue, or if that fails, just run it as a new session
-# 
+#
+
+# Source environment file if it exists (for GH_TOKEN and other secrets)
+if [ -f ~/.claude/.env ]; then
+    source ~/.claude/.env
+fi
 
 # Determine mount strategy based on whether we're in a git repo
 if git rev-parse --git-dir > /dev/null 2>&1; then
@@ -46,6 +51,10 @@ fi
 CLAUDE_STATE_SOURCE=$HOME/.claude
 CLAUDE_STATE_CONTAINER=/home/agent/.claude
 
+# GitHub CLI configuration mount (allows gh config persistence)
+GH_CONFIG_SOURCE=$HOME/.config/gh
+GH_CONFIG_CONTAINER=/home/agent/.config/gh
+
 # Check if container already exists
 if docker ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
     # Container exists, restart it and attach
@@ -59,10 +68,12 @@ else
     -e ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID} \
     -e GOOGLE_APPLICATION_CREDENTIALS=${ADC_IN_CONTAINER} \
     -e EDITOR=vim \
+    -e GH_TOKEN=${GH_TOKEN:-} \
     ${WORKSPACE_MOUNT} \
     -v ${ADC_SOURCE}:${ADC_IN_CONTAINER}:ro \
     -v /tmp:/tmp \
     -v ${CLAUDE_STATE_SOURCE}:${CLAUDE_STATE_CONTAINER} \
+    -v ${GH_CONFIG_SOURCE}:${GH_CONFIG_CONTAINER} \
     ${SSH_AUTH_MOUNT} \
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
