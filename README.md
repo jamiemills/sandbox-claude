@@ -28,8 +28,16 @@ Claude Sandbox encapsulates Claude Code and its dependencies in a Docker contain
 
 ### Build the Image
 
+**Using Docker:**
+
 ```bash
 docker build -f docker/Dockerfile -t claude_sandbox .
+```
+
+**Using Podman:**
+
+```bash
+podman build -f docker/Dockerfile -t claude_sandbox .
 ```
 
 ### Run Claude Code
