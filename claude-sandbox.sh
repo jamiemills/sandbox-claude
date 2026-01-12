@@ -80,7 +80,8 @@ else
     claude_sandbox \
     claude"
 
-    ${CLAUDE_DOCKER_CMD} --model ${MODEL} --dangerously-skip-permissions --continue ${@} || \
+    # ${CLAUDE_DOCKER_CMD} --model ${MODEL} --dangerously-skip-permissions --continue ${@} || \
+    ${CLAUDE_DOCKER_CMD} --model ${MODEL} --dangerously-skip-permissions ${@} || \
     ${CLAUDE_DOCKER_CMD} --model ${MODEL} --dangerously-skip-permissions ${@} 
 fi
 
