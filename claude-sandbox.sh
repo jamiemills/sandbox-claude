@@ -1,17 +1,40 @@
 #!/bin/bash
+# Version: 1.0
 
 #
-# Run the specialist Docker Sandbox command to wrap Claude. See https://docs.docker.com/ai/sandboxes/
+# Run Claude Code in a containerised sandbox environment. Supports Docker and Podman.
+# See https://docs.docker.com/ai/sandboxes/ for more information.
 #
-# This will
-# - use Google Application Default Credentials / Google Vertex to access the models (depends on /Users/jamie.mills/c9h/code/sandbox-claude/.config/gcloud/application_default_credentials.json being available)
-# - use Haiku as the model
-# - Run claude with --continue, or if that fails, just run it as a new session
+# Required environment variables:
+#   MODEL - The Claude model to use (e.g., haiku, opus). Example: MODEL=haiku ./claude-sandbox.sh
+#
+# Optional environment variables:
+#   CONTAINER_RUNTIME - Container runtime to use (default: docker). Example: CONTAINER_RUNTIME=podman ./claude-sandbox.sh
+#
+# Google Vertex AI support (optional):
+#   CLAUDE_CODE_USE_VERTEX - Enable Vertex AI
+#   CLOUD_ML_REGION - Google Cloud region
+#   ANTHROPIC_VERTEX_PROJECT_ID - GCP project ID
 #
 
 # Source environment file if it exists (for GH_TOKEN and other secrets)
 if [ -f ~/.claude/.env ]; then
     source ~/.claude/.env
+fi
+
+# Validate MODEL environment variable is set
+if [ -z "${MODEL}" ]; then
+    echo "Error: MODEL environment variable not set. Usage: MODEL=haiku ./claude-sandbox.sh"
+    exit 1
+fi
+
+# Set container runtime (default: docker, can be overridden with CONTAINER_RUNTIME env var)
+CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
+
+# Validate specified runtime is available
+if ! command -v "${CONTAINER_RUNTIME}" &> /dev/null; then
+    echo "Error: ${CONTAINER_RUNTIME} not found. Please install it."
+    exit 1
 fi
 
 # Determine mount strategy based on whether we're in a git repo
@@ -55,13 +78,17 @@ CLAUDE_STATE_CONTAINER=/home/agent/.claude
 GH_CONFIG_SOURCE=$HOME/.config/gh
 GH_CONFIG_CONTAINER=/home/agent/.config/gh
 
+# Git configuration mount (allows git config persistence)
+GITCONFIG_SOURCE=$HOME/.gitconfig
+GITCONFIG_CONTAINER=/home/agent/.gitconfig
+
 # Check if container already exists
-if docker ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
+if ${CONTAINER_RUNTIME} ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
     # Container exists, restart it and attach
-    docker start -ai "${CONTAINER_NAME}"
+    ${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
 else
     # Container doesn't exist, create and run it
-    CLAUDE_DOCKER_CMD="docker run -it \
+    CLAUDE_DOCKER_CMD="${CONTAINER_RUNTIME} run -it \
     --name "${CONTAINER_NAME}" \
     -e CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX} \
     -e CLOUD_ML_REGION=${CLOUD_ML_REGION} \
@@ -74,6 +101,7 @@ else
     -v /tmp:/tmp \
     -v ${CLAUDE_STATE_SOURCE}:${CLAUDE_STATE_CONTAINER} \
     -v ${GH_CONFIG_SOURCE}:${GH_CONFIG_CONTAINER} \
+    -v ${GITCONFIG_SOURCE}:${GITCONFIG_CONTAINER}:ro \
     ${SSH_AUTH_MOUNT} \
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
