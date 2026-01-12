@@ -7,7 +7,7 @@ ENV HOME=/home/agent \
     SHELL=/bin/bash \
     PATH=/home/agent/.local/bin:$PATH
 
-# Install system dependencies, Node.js 20.x, GitHub CLI, vim, and tmux
+# Install system dependencies, Node.js 20.x, GitHub CLI, vim, tmux, and socat
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     curl \
@@ -21,6 +21,7 @@ RUN apt-get update && \
     unzip \
     vim \
     tmux \
+    socat \
     gh && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | sh - && \
     apt-get install -y nodejs && \
@@ -58,9 +59,7 @@ RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
 
 # Create entrypoint script
 # Note: SSH keys are mounted read-only, so we don't need (and can't) chmod them
-RUN echo '#!/bin/bash' > ~/.entrypoint.sh && \
-    echo 'exec claude "$@"' >> ~/.entrypoint.sh && \
-    chmod +x ~/.entrypoint.sh
+RUN printf '#!/bin/bash\n\n# Set up SSH agent relay if host provides the relay port\nif [ -n "$SSH_AGENT_RELAY_PORT" ]; then\n    echo "Setting up SSH agent relay to host ssh-agent..."\n\n    # Create directory for relay socket\n    mkdir -p /tmp/ssh-agent-relay-dir\n\n    # Start socat client that:\n    # - Listens on Unix socket at /tmp/ssh-agent-relay-dir/ssh-agent\n    # - Forwards connections to host'"'"'s TCP relay on port 6010\n    socat UNIX-LISTEN:/tmp/ssh-agent-relay-dir/ssh-agent,fork \\\n          TCP:host.docker.internal:${SSH_AGENT_RELAY_PORT} &\n    RELAY_PID=$!\n\n    # Point SSH_AUTH_SOCK to the relay socket\n    export SSH_AUTH_SOCK=/tmp/ssh-agent-relay-dir/ssh-agent\n\n    echo "SSH agent relay configured (PID: $RELAY_PID)"\n    echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"\nfi\n\n# Continue with normal Claude Code startup\nexec claude "$@"\n' > ~/.entrypoint.sh && chmod +x ~/.entrypoint.sh
 
 # Set working directory
 WORKDIR /home/agent/workspace

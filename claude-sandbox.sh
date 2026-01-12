@@ -117,6 +117,7 @@ else
     -e GOOGLE_APPLICATION_CREDENTIALS=${ADC_IN_CONTAINER} \
     -e EDITOR=vim \
     -e GH_TOKEN=${GH_TOKEN:-} \
+    -e SSH_AGENT_RELAY_PORT=6010 \
     ${WORKSPACE_MOUNT} \
     -v ${ADC_SOURCE}:${ADC_IN_CONTAINER}:ro \
     --tmpfs /tmp:rw,noexec,nosuid,size=1g \
