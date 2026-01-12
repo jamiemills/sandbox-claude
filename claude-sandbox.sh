@@ -99,6 +99,7 @@ if ${CONTAINER_RUNTIME} ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.N
 	${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
 else
 	# Container doesn't exist, create and run it
+	# shellcheck disable=SC2089,SC2090,SC2124
 	CLAUDE_DOCKER_CMD="${CONTAINER_RUNTIME} run -it \
     --name ${CONTAINER_NAME} \
     -e CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX} \
@@ -117,9 +118,10 @@ else
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
     claude_sandbox \
-    claude"
+    sh -c 'chmod 600 /home/agent/.ssh/id_* 2>/dev/null; exec /usr/local/bin/claude \"$@\"' sh"
 
 	# ${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" || \
+	# shellcheck disable=SC2090
 	${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" ||
 		${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
 fi
