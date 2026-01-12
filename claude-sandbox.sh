@@ -119,7 +119,7 @@ else
     -e GH_TOKEN=${GH_TOKEN:-} \
     ${WORKSPACE_MOUNT} \
     -v ${ADC_SOURCE}:${ADC_IN_CONTAINER}:ro \
-    -v /tmp:/tmp \
+    --tmpfs /tmp:rw,noexec,nosuid,size=1g \
     -v ${CLAUDE_STATE_SOURCE}:${CLAUDE_STATE_CONTAINER} \
     -v ${GH_CONFIG_SOURCE}:${GH_CONFIG_CONTAINER} \
     -v ${GITCONFIG_SOURCE}:${GITCONFIG_CONTAINER}:ro \
