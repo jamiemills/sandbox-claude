@@ -65,11 +65,20 @@ ADC_SOURCE=$HOME/.config/gcloud/application_default_credentials.json
 ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_credentials.json
 
 # SSH key forwarding for git operations
-# Mount SSH keys directly for both Docker and Podman
+# Mount SSH keys directly (but not config) to avoid platform-specific issues
 # Keys are regular files that work across VM boundaries and socket forwarding issues
+# Only mount key files to prevent host SSH config (which may contain platform-specific options
+# like "usekeychain" for macOS) from interfering with container SSH
 SSH_AUTH_MOUNT=""
-if [ -d "$HOME/.ssh" ]; then
-	SSH_AUTH_MOUNT="-v $HOME/.ssh:/home/agent/.ssh:ro"
+if [ -f "$HOME/.ssh/id_rsa" ] || [ -f "$HOME/.ssh/id_ed25519" ] || [ -f "$HOME/.ssh/id_ecdsa" ]; then
+	# Mount individual key files read-only
+	SSH_AUTH_MOUNT="-v $HOME/.ssh/id_rsa:/home/agent/.ssh/id_rsa:ro"
+	[ -f "$HOME/.ssh/id_ed25519" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519:/home/agent/.ssh/id_ed25519:ro"
+	[ -f "$HOME/.ssh/id_ecdsa" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa:/home/agent/.ssh/id_ecdsa:ro"
+	# Also mount public keys if they exist
+	[ -f "$HOME/.ssh/id_rsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_rsa.pub:/home/agent/.ssh/id_rsa.pub:ro"
+	[ -f "$HOME/.ssh/id_ed25519.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519.pub:/home/agent/.ssh/id_ed25519.pub:ro"
+	[ -f "$HOME/.ssh/id_ecdsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa.pub:/home/agent/.ssh/id_ecdsa.pub:ro"
 fi
 
 # Claude state directory mount (includes memory file and todos) - read-write

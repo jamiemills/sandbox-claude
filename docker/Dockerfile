@@ -47,6 +47,15 @@ USER agent
 # Configure bash environment with pip alias
 RUN echo 'alias pip="uv pip"' >> ~/.bashrc
 
+# Create SSH config for git operations (keys will be mounted from host at runtime)
+# This config is used when SSH keys are mounted and provides proper GitHub settings
+RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+    echo "Host github.com" > ~/.ssh/config && \
+    echo "  HostName github.com" >> ~/.ssh/config && \
+    echo "  User git" >> ~/.ssh/config && \
+    echo "  StrictHostKeyChecking accept-new" >> ~/.ssh/config && \
+    chmod 600 ~/.ssh/config
+
 # Set working directory
 WORKDIR /home/agent/workspace
 
