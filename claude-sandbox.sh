@@ -117,8 +117,8 @@ else
     ${SSH_AUTH_MOUNT} \
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
-    claude_sandbox \
-    sh -c 'chmod 600 /home/agent/.ssh/id_* 2>/dev/null; exec /usr/local/bin/claude' sh"
+    --entrypoint /home/agent/.entrypoint.sh \
+    claude_sandbox"
 
 	# ${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" || \
 	# shellcheck disable=SC2090

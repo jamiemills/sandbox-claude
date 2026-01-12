@@ -56,6 +56,10 @@ RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
     echo "  StrictHostKeyChecking accept-new" >> ~/.ssh/config && \
     chmod 600 ~/.ssh/config
 
+# Create entrypoint script to fix SSH key permissions and run Claude Code
+RUN printf '#!/bin/sh\nchmod 600 /home/agent/.ssh/id_* 2>/dev/null || true\nexec claude "$@"\n' > ~/.entrypoint.sh && \
+    chmod +x ~/.entrypoint.sh
+
 # Set working directory
 WORKDIR /home/agent/workspace
 
