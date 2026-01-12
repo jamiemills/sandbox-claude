@@ -77,6 +77,46 @@ The script automatically:
 - Connects to the SSH agent relay (if running) for passphrase-protected keys
 - Resumes previous sessions or starts a new one
 - Sets the editor to vim
+- **Runs the container in a tmux session for easy reconnection**
+
+### Tmux Session Management
+
+Each time you run the script, the container starts in a **named tmux session**. This allows you to detach and reconnect without restarting the container.
+
+**Session naming format:** `{runtime}-{container-name}`
+
+Examples:
+- `docker-claude-sandbox-claude` (Docker + sandbox-claude repo)
+- `podman-claude-sandbox-claude` (Podman + sandbox-claude repo)
+
+**Workflow:**
+
+```bash
+# First run: Creates tmux session and attaches
+MODEL=haiku ./claude-sandbox.sh
+
+# In the container, work as usual. When you want to exit:
+# Press Ctrl+B then D to detach (keeps container running)
+
+# Later, reconnect to the running session:
+# Option 1: Run the same command again
+MODEL=haiku ./claude-sandbox.sh
+
+# Option 2: Attach directly using tmux
+tmux attach -t docker-claude-sandbox-claude
+
+# List all sessions
+tmux list-sessions
+
+# Kill a session (stops the container)
+tmux kill-session -t docker-claude-sandbox-claude
+```
+
+**Benefits:**
+- Container keeps running after you exit
+- No need to rebuild or restart the container
+- Multiple containers can run simultaneously in different sessions
+- Works with both Docker and Podman
 
 ### Using SSH Keys with Passphrases (SSH Agent Relay)
 
