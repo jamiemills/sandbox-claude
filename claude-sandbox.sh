@@ -109,7 +109,7 @@ if ${CONTAINER_RUNTIME} ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.N
 else
 	# Container doesn't exist, create and run it
 	# shellcheck disable=SC2089,SC2090,SC2124
-	CLAUDE_DOCKER_CMD="${CONTAINER_RUNTIME} run -it \
+	CONTAINER_CMD="${CONTAINER_RUNTIME} run -it \
     --name ${CONTAINER_NAME} \
     -e CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX} \
     -e CLOUD_ML_REGION=${CLOUD_ML_REGION} \
@@ -129,9 +129,7 @@ else
     --entrypoint /home/agent/.entrypoint.sh \
     claude_sandbox"
 
-	# ${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" || \
-	# shellcheck disable=SC2090
-	${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" ||
+	${CONTAINER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" ||
 		${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
 fi
 
