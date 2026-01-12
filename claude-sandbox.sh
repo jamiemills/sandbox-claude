@@ -65,10 +65,17 @@ ADC_SOURCE=$HOME/.config/gcloud/application_default_credentials.json
 ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_credentials.json
 
 # SSH Agent forwarding for git operations
-SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-}
 SSH_AUTH_MOUNT=""
-if [ -n "$SSH_AUTH_SOCK" ]; then
-	SSH_AUTH_MOUNT="-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+if [ "${CONTAINER_RUNTIME}" = "podman" ]; then
+	# Podman 4.4+ supports native SSH agent forwarding via --ssh=default
+	# This works seamlessly across the VM boundary on macOS
+	SSH_AUTH_MOUNT="--ssh=default"
+else
+	# Docker: mount the SSH auth socket directly
+	SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-}
+	if [ -n "$SSH_AUTH_SOCK" ]; then
+		SSH_AUTH_MOUNT="-v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+	fi
 fi
 
 # Claude state directory mount (includes memory file and todos) - read-write
