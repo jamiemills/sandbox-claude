@@ -21,7 +21,7 @@ Claude Sandbox encapsulates Claude Code and its dependencies in a Docker contain
 
 ### Prerequisites
 
-- Docker (with Daemon running)
+- Docker (with Daemon running) or Podman
 - Bash shell
 - Google Application Default Credentials (optional, for Vertex AI)
 - SSH keys configured for GitHub (optional, for git operations)
@@ -34,9 +34,13 @@ docker build -f docker/Dockerfile -t claude_sandbox .
 
 ### Run Claude Code
 
+The `MODEL` environment variable is **required**:
+
 ```bash
-./claude-sandbox.sh
+MODEL=haiku ./claude-sandbox.sh
 ```
+
+Supported models: `haiku`, `sonnet`, `opus`, or any valid Claude model identifier.
 
 The script automatically:
 - Detects whether you're in a git repository
@@ -46,37 +50,72 @@ The script automatically:
 - Resumes previous sessions or starts a new one
 - Sets the editor to vim
 
+### Using Podman Instead of Docker
+
+To use Podman as your container runtime:
+
+```bash
+MODEL=haiku CONTAINER_RUNTIME=podman ./claude-sandbox.sh
+```
+
 ## How It Works
 
 ### Mount Strategy
 
-The script intelligently determines how to mount your workspace:
+The script intelligently determines how to mount your workspace based on whether you're in a git repository.
 
 **In a git repository:**
-- Mounts the repository root at `/home/agent/<repo-name>`
-- Preserves relative paths within the container
+- Repository root mounts at `/home/agent/<repo-name>`
+- Relative paths are preserved in the container
 - Container is named `claude-<repo-name>` for easy identification
+- Example: In `/home/user/projects/my-app`, the repository mounts at `/home/agent/my-app`
 
 **Outside a git repository:**
-- Mounts the current directory at `/home/agent/workspace`
-- Container is named `claude-workspace-<hash>` based on directory path
+- Current directory mounts at `/home/agent/workspace`
+- Container is named `claude-workspace-<hash>` based on directory path hash
+
+### Working Directory Resolution
+
+When the container starts, the working directory is automatically set based on your location:
+
+**In a repository:**
+- If you run the script from the repo root, you start in `/home/agent/<repo-name>`
+- If you run it from a subdirectory (e.g., `src/`), you start in `/home/agent/<repo-name>/src`
+- Relative paths are preserved, so `cd ../../` works as expected
+
+**Outside a repository:**
+- You always start in `/home/agent/workspace`
 
 ### Credential Handling
 
-Three types of credentials are mounted:
+Credentials are securely mounted with careful attention to read/write permissions:
 
 | Credential | Host Location | Container Path | Purpose | Read-Only |
 |---|---|---|---|---|
-| Google Cloud ADC | `~/.config/gcloud/application_default_credentials.json` | `/home/agent/workspace/.config/gcloud/...` | Vertex AI access | ✓ |
-| SSH keys | Via `SSH_AUTH_SOCK` | Socket forwarded | Git operations | ✓ |
-| Claude state | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
+| **Google Cloud ADC** | `~/.config/gcloud/application_default_credentials.json` | `<workspace>/.config/gcloud/...` | Vertex AI access | ✓ |
+| **SSH keys** | Via `SSH_AUTH_SOCK` | Socket forwarded | Git operations | ✓ |
+| **Claude state** | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
+| **Git config** | `~/.gitconfig` | `/home/agent/.gitconfig` | User identity | ✓ |
+| **GitHub CLI config** | `~/.config/gh` | `/home/agent/.config/gh` | gh authentication | ✗ |
+| **GitHub token** | Via `~/.claude/.env` | `GH_TOKEN` env var | gh API access | N/A |
 
-### Session Persistence
+**Note on ADC path:** Google Cloud credentials mount within your workspace. In a git repository, that's `<repo-name>/.config/gcloud/...`; outside a repository, it's `workspace/.config/gcloud/...`. The `GOOGLE_APPLICATION_CREDENTIALS` environment variable is automatically set to point to the correct location.
 
-The script checks if a named container for your workspace already exists:
-- If it exists, the container is restarted and you reconnect to the running session
-- If it doesn't exist, a new container is created and Claude Code starts fresh
-- All state (memory, todos, etc.) is preserved across sessions
+**Note on git configuration:** Your host's `~/.gitconfig` is mounted read-only, ensuring your git user identity (name and email) is available for commits without risk of accidental modification.
+
+### Session Persistence & Resilience
+
+The script implements smart session management with graceful fallback:
+
+**Container Lifecycle:**
+1. If a named container exists for your workspace, it's restarted and you reconnect
+2. If it doesn't exist, a new container is created and Claude Code starts fresh
+3. All state (memory, todos, etc.) is preserved across sessions
+
+**Resilience Strategy:**
+When starting a fresh container, the script attempts to continue the previous session using the `--continue` flag. If Claude Code detects state corruption or other issues, this may fail. In such cases, the script automatically falls back to restarting the container with a clean session, ensuring you never get stuck.
+
+This design means interrupted or problematic sessions recover gracefully without manual intervention.
 
 ## Configuration
 
@@ -90,20 +129,20 @@ export CLOUD_ML_REGION=us-central1                 # Cloud region
 export ANTHROPIC_VERTEX_PROJECT_ID=my-project-id  # GCP project
 ```
 
-### Git Configuration
+### Credential Configuration
 
-To include your git identity in commits:
+**Git Configuration:** Your host's `~/.gitconfig` is automatically mounted read-only into the container, so your git user identity (name and email) is available for commits.
 
-```bash
-docker run -v ~/.gitconfig:/home/agent/.gitconfig:ro ...
-```
-
-Or configure inside the container:
+If you don't have a global git config on your host, you can set one:
 
 ```bash
 git config --global user.name "Your Name"
 git config --global user.email "your.email@example.com"
 ```
+
+**Google Cloud Credentials:** If you want to use Vertex AI, ensure `~/.config/gcloud/application_default_credentials.json` exists on your host. See "Credential Handling" in the "How It Works" section for details.
+
+**GitHub Token:** See "GitHub CLI (gh) Configuration" below for GitHub token setup.
 
 ## Installed Tools
 
@@ -172,20 +211,39 @@ ssh -T git@github.com
 
 Both should work without prompts.
 
+### Container Health Checks
+
+The container includes built-in health checks that verify Claude Code is functioning correctly:
+
+- **Health check command:** Runs `claude --version` every 30 seconds
+- **Startup grace period:** 5 seconds (allows Claude Code to initialise)
+- **Timeout:** 3 seconds per check
+- **Retry threshold:** 3 consecutive failures before marking unhealthy
+
+These health checks ensure your container is always in a reliable state. Docker automatically restarts unhealthy containers based on restart policies.
+
 ## Directory Structure
 
 ```
 sandbox-claude/
-├── README.md                    # This file
-├── CLAUDE.md                    # Project instructions for Claude AI
-├── claude-sandbox.sh            # Entry point script (executable)
+├── README.md                         # User-facing documentation (this file)
+├── CLAUDE.md                         # AI assistant guidelines and development notes
+├── claude-sandbox.sh                 # Main entry point script (executable)
 ├── docker/
-│   └── Dockerfile              # Container image definition
+│   └── Dockerfile                   # Container image definition with all dependencies
 ├── .claude/
-│   └── settings.local.json     # Claude Code permission allowlist
-├── .git/                        # Git repository
-└── .gitignore                  # Git ignore rules
+│   ├── settings.local.json          # Claude Code permission allowlist
+│   └── plans/                        # Development plans and documentation
+├── .config/                          # (Optional) Host configuration directory
+├── .git/                             # Git repository metadata
+└── .gitignore                        # Files to exclude from version control
 ```
+
+**Key Files:**
+- `claude-sandbox.sh` — The main script you run; handles container lifecycle and mount strategy
+- `Dockerfile` — Defines the container image with Node.js, Python, Git, GitHub CLI, and Claude Code
+- `CLAUDE.md` — Contains guidelines for AI assistants working on this project
+- `settings.local.json` — Explicitly allows certain commands (Docker, GitHub, gcloud) for Claude Code security
 
 ## Troubleshooting
 
@@ -219,8 +277,19 @@ echo $SSH_AUTH_SOCK
 
 # If empty, start the agent
 eval $(ssh-agent -s)
-ssh-add ~/.ssh/id_ed25519  # or your key path
+
+# Add your SSH key (replace with your key path)
+ssh-add ~/.ssh/id_rsa      # or id_ed25519, id_ecdsa, etc.
 ```
+
+Inside the container, verify SSH is working:
+
+```bash
+# Inside container
+ssh -T git@github.com
+```
+
+This should authenticate without prompting for a password.
 
 ### Container won't start
 
@@ -235,6 +304,38 @@ Rebuild if needed:
 ```bash
 docker build --no-cache -f docker/Dockerfile -t claude_sandbox .
 ```
+
+### Working directory is incorrect
+
+The container's working directory depends on where you run the script:
+
+**In a git repository:**
+```bash
+# Running from repo root
+cd /home/user/projects/my-app
+./claude-sandbox.sh
+# Container starts in /home/agent/my-app
+
+# Running from subdirectory
+cd /home/user/projects/my-app/src
+./claude-sandbox.sh
+# Container starts in /home/agent/my-app/src (relative path preserved)
+```
+
+**Outside a git repository:**
+```bash
+cd /tmp/my-project
+./claude-sandbox.sh
+# Container always starts in /home/agent/workspace
+```
+
+To verify the correct working directory inside the container:
+
+```bash
+pwd
+```
+
+If you're in the wrong directory, exit the container and re-run the script from the desired location.
 
 ### Previous session won't resume
 
@@ -251,6 +352,8 @@ docker rm <container-id>
 ```
 
 Then restart the session script.
+
+If the container exists but `--continue` fails (corrupted state), the script automatically falls back to restarting with a clean session, so you shouldn't get stuck.
 
 ## Development
 
