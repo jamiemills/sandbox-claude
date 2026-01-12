@@ -40,6 +40,24 @@ docker build -f docker/Dockerfile -t claude_sandbox .
 podman build -f docker/Dockerfile -t claude_sandbox .
 ```
 
+### Important: Choose Your Container Runtime
+
+Docker and Podman maintain **separate image registries**. An image built with Docker is not visible to Podman, and vice versa.
+
+**You must build and run with the same container runtime:**
+
+```bash
+# Option A: Use Docker for both build and run
+docker build -f docker/Dockerfile -t claude_sandbox .
+MODEL=haiku ./claude-sandbox.sh
+
+# Option B: Use Podman for both build and run
+podman build -f docker/Dockerfile -t claude_sandbox .
+MODEL=haiku CONTAINER_RUNTIME=podman ./claude-sandbox.sh
+```
+
+Do not mix runtimes (e.g., Docker build with Podman run) — the container runtime will not find the image and will attempt to pull from a remote registry, resulting in an error.
+
 ### Run Claude Code
 
 The `MODEL` environment variable is **required**:
