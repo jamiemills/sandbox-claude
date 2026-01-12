@@ -110,8 +110,8 @@ else
     claude"
 
 	# ${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" || \
-	${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions "${@}" ||
-		${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions "${@}"
+	${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" ||
+		${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
 fi
 
 exit 0
