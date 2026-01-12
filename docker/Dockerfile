@@ -29,10 +29,9 @@ RUN apt-get update && \
 # Install uv globally using the standalone installer
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create non-root user and set up workspace with config and SSH directories
+# Create non-root user and set up workspace directories
 RUN useradd -m -s /bin/bash agent && \
-    mkdir -p /home/agent/workspace /home/agent/workspace/.config /home/agent/workspace/.ssh /home/agent/.claude /home/agent/.config/gh && \
-    chmod 700 /home/agent/workspace/.ssh && \
+    mkdir -p /home/agent/workspace /home/agent/workspace/.config /home/agent/.claude /home/agent/.config/gh && \
     chmod 755 /home/agent/workspace/.config && \
     chmod 755 /home/agent/.claude && \
     chmod 755 /home/agent/.config/gh && \
@@ -47,15 +46,6 @@ USER agent
 
 # Configure bash environment with pip alias
 RUN echo 'alias pip="uv pip"' >> ~/.bashrc
-
-# Configure SSH to use agent and auto-accept GitHub host key
-RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
-    echo "Host github.com" >> ~/.ssh/config && \
-    echo "  HostName github.com" >> ~/.ssh/config && \
-    echo "  User git" >> ~/.ssh/config && \
-    echo "  StrictHostKeyChecking accept-new" >> ~/.ssh/config && \
-    echo "  AddKeysToAgent yes" >> ~/.ssh/config && \
-    chmod 600 ~/.ssh/config
 
 # Set working directory
 WORKDIR /home/agent/workspace
@@ -74,13 +64,10 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # Define workspace volume mount point for persistent project storage
 VOLUME ["/home/agent/workspace"]
 
-# Git configuration: Mount your host ~/.gitconfig to /home/agent/.gitconfig for commits
-# Example: docker run -v ~/.gitconfig:/home/agent/.gitconfig:ro ...
-
 # Set default command
 CMD ["claude"]
 
 # Metadata
-LABEL description="Claude Code sandbox with SSH, GitHub CLI, Claude, and uv" \
-      version="2.3" \
+LABEL description="Claude Code sandbox with GitHub CLI, Claude, and uv" \
+      version="2.4" \
       maintainer="Claude Sandbox"
