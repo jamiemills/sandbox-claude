@@ -1,7 +1,18 @@
 #!/bin/bash
 # SSH Agent Relay - Bridges host's ssh-agent to containers via TCP
 
+#
+# >> Relay runs in background detached session
+# tmux new-session -d -s ssh-agent-relay './start-ssh-agent-relay.sh'
+#
+# >> Reconnect anytime:
+# tmux attach -t ssh-agent-relay
+#
+
 set -e
+
+# cache the passphrase
+ssh-add ~/.ssh/id_ed25519
 
 # Find the SSH agent socket
 if [ -z "$SSH_AUTH_SOCK" ]; then
@@ -37,15 +48,11 @@ echo "Found SSH agent socket at: $SSH_AGENT_SOCK"
 # Kill any existing relay on port 6010
 pkill -f "socat.*TCP-LISTEN:6010" || true
 
-# Start socat relay on port 6010
+# Start socat relay on port 6010 in detached tmux session
 echo "Starting SSH agent relay on port 6010..."
-socat TCP-LISTEN:6010,reuseaddr,fork UNIX-CONNECT:"$SSH_AGENT_SOCK" &
-RELAY_PID=$!
+tmux new-session -d -s ssh-relay "socat TCP-LISTEN:6010,reuseaddr,fork UNIX-CONNECT:\"$SSH_AGENT_SOCK\""
 
-echo "SSH Agent relay started (PID: $RELAY_PID) on port 6010"
-echo ""
-echo "Container can now access your ssh-agent via:"
-echo "  SSH_AUTH_SOCK=/tmp/ssh-agent-relay"
-echo ""
-echo "You can now start the container:"
-echo "  MODEL=haiku ./claude-sandbox.sh"
+echo "Relay running in tmux session 'ssh-relay'"
+echo "Reconnect with: tmux attach -t ssh-relay"
+
+exit 0
