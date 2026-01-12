@@ -56,8 +56,12 @@ RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
     echo "  StrictHostKeyChecking accept-new" >> ~/.ssh/config && \
     chmod 600 ~/.ssh/config
 
-# Create entrypoint script to fix SSH key permissions and run Claude Code
-RUN printf '#!/bin/sh\nchmod 600 /home/agent/.ssh/id_* 2>/dev/null || true\nexec claude "$@"\n' > ~/.entrypoint.sh && \
+# Create entrypoint script to fix SSH key permissions
+RUN echo '#!/bin/bash' > ~/.entrypoint.sh && \
+    echo 'for key in /home/agent/.ssh/id_rsa /home/agent/.ssh/id_ed25519 /home/agent/.ssh/id_ecdsa; do' >> ~/.entrypoint.sh && \
+    echo '  if [ -f "$key" ]; then chmod 600 "$key"; fi' >> ~/.entrypoint.sh && \
+    echo 'done' >> ~/.entrypoint.sh && \
+    echo 'exec claude "$@"' >> ~/.entrypoint.sh && \
     chmod +x ~/.entrypoint.sh
 
 # Set working directory

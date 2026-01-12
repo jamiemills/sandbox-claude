@@ -38,6 +38,17 @@ if ! command -v "${CONTAINER_RUNTIME}" &>/dev/null; then
 	exit 1
 fi
 
+# SSH Key Setup for Podman
+# For SSH keys with passphrases: Remove the passphrase before using in containers.
+# SSH agent socket forwarding doesn't work reliably across Podman's VM boundary on macOS.
+# Use passphrase-free keys for container SSH operations. The key file permissions
+# are protected by the container's read-only mount and non-root user execution.
+#
+# To remove passphrase from an SSH key:
+#   ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<current_passphrase>"
+#
+# See .claude/CLAUDE.md for full SSH setup documentation.
+
 # Determine mount strategy based on whether we're in a git repo
 if git rev-parse --git-dir >/dev/null 2>&1; then
 	# In a repo: mount repo root at /home/agent/<repo-name>
@@ -70,16 +81,14 @@ ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_creden
 # Only mount key files to prevent host SSH config (which may contain platform-specific options
 # like "usekeychain" for macOS) from interfering with container SSH
 SSH_AUTH_MOUNT=""
-if [ -f "$HOME/.ssh/id_rsa" ] || [ -f "$HOME/.ssh/id_ed25519" ] || [ -f "$HOME/.ssh/id_ecdsa" ]; then
-	# Mount individual key files read-only
-	SSH_AUTH_MOUNT="-v $HOME/.ssh/id_rsa:/home/agent/.ssh/id_rsa:ro"
-	[ -f "$HOME/.ssh/id_ed25519" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519:/home/agent/.ssh/id_ed25519:ro"
-	[ -f "$HOME/.ssh/id_ecdsa" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa:/home/agent/.ssh/id_ecdsa:ro"
-	# Also mount public keys if they exist
-	[ -f "$HOME/.ssh/id_rsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_rsa.pub:/home/agent/.ssh/id_rsa.pub:ro"
-	[ -f "$HOME/.ssh/id_ed25519.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519.pub:/home/agent/.ssh/id_ed25519.pub:ro"
-	[ -f "$HOME/.ssh/id_ecdsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa.pub:/home/agent/.ssh/id_ecdsa.pub:ro"
-fi
+# Mount private keys if they exist
+[ -f "$HOME/.ssh/id_rsa" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_rsa:/home/agent/.ssh/id_rsa:ro"
+[ -f "$HOME/.ssh/id_ed25519" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519:/home/agent/.ssh/id_ed25519:ro"
+[ -f "$HOME/.ssh/id_ecdsa" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa:/home/agent/.ssh/id_ecdsa:ro"
+# Mount public keys if they exist
+[ -f "$HOME/.ssh/id_rsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_rsa.pub:/home/agent/.ssh/id_rsa.pub:ro"
+[ -f "$HOME/.ssh/id_ed25519.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519.pub:/home/agent/.ssh/id_ed25519.pub:ro"
+[ -f "$HOME/.ssh/id_ecdsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa.pub:/home/agent/.ssh/id_ecdsa.pub:ro"
 
 # Claude state directory mount (includes memory file and todos) - read-write
 CLAUDE_STATE_SOURCE=$HOME/.claude
