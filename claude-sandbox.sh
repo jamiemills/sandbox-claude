@@ -71,6 +71,9 @@ else
 	CONTAINER_NAME="claude-workspace-${DIR_HASH}"
 fi
 
+# Create tmux session name (includes runtime)
+TMUX_SESSION="${CONTAINER_RUNTIME}-${CONTAINER_NAME}"
+
 # Mount points (credentials mounted under workspace)
 ADC_SOURCE=$HOME/.config/gcloud/application_default_credentials.json
 ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_credentials.json
@@ -102,14 +105,26 @@ GH_CONFIG_CONTAINER=/home/agent/.config/gh
 GITCONFIG_SOURCE=$HOME/.gitconfig
 GITCONFIG_CONTAINER=/home/agent/.gitconfig
 
-# Check if container already exists
-if ${CONTAINER_RUNTIME} ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
-	# Container exists, restart it and attach
-	${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
+# Check if tmux session already exists
+if tmux has-session -t "${TMUX_SESSION}" 2>/dev/null; then
+	# Session exists, attach to it
+	echo "Attaching to existing tmux session: ${TMUX_SESSION}"
+	tmux attach -t "${TMUX_SESSION}"
 else
-	# Container doesn't exist, create and run it
-	# shellcheck disable=SC2089,SC2090,SC2124
-	CONTAINER_CMD="${CONTAINER_RUNTIME} run -it \
+	# Check if container already exists (for resume)
+	CONTAINER_EXISTS=false
+	if ${CONTAINER_RUNTIME} ps -a --filter "name=^${CONTAINER_NAME}$" --format "{{.Names}}" | grep -q "${CONTAINER_NAME}"; then
+		CONTAINER_EXISTS=true
+	fi
+
+	# Create container command based on whether it exists
+	if [ "$CONTAINER_EXISTS" = true ]; then
+		# Container exists, create command to restart and attach
+		CONTAINER_CMD="${CONTAINER_RUNTIME} start -ai ${CONTAINER_NAME}"
+	else
+		# Container doesn't exist, create and run it
+		# shellcheck disable=SC2089,SC2090,SC2124
+		CONTAINER_CMD="${CONTAINER_RUNTIME} run -it \
     --name ${CONTAINER_NAME} \
     -e CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX} \
     -e CLOUD_ML_REGION=${CLOUD_ML_REGION} \
@@ -128,10 +143,22 @@ else
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
     --entrypoint /home/agent/.entrypoint.sh \
-    claude_sandbox"
+    claude_sandbox \
+    --model ${MODEL} --dangerously-skip-permissions --continue ${@}"
+	fi
 
-	${CONTAINER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" ||
-		${CONTAINER_RUNTIME} start -ai "${CONTAINER_NAME}"
+	# Create tmux session and run container command
+	echo "Creating tmux session: ${TMUX_SESSION}"
+	echo "Container runtime: ${CONTAINER_RUNTIME}"
+	echo "Container name: ${CONTAINER_NAME}"
+	echo ""
+	echo "To reconnect to this session later, run:"
+	echo "  tmux attach -t ${TMUX_SESSION}"
+	echo ""
+
+	tmux new-session -d -s "${TMUX_SESSION}" "${CONTAINER_CMD}"
+	sleep 1
+	tmux attach -t "${TMUX_SESSION}"
 fi
 
 exit 0
