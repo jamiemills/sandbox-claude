@@ -118,7 +118,7 @@ else
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
     claude_sandbox \
-    sh -c 'chmod 600 /home/agent/.ssh/id_* 2>/dev/null; exec /usr/local/bin/claude \"$@\"' sh"
+    sh -c 'chmod 600 /home/agent/.ssh/id_* 2>/dev/null; exec /usr/local/bin/claude' sh"
 
 	# ${CLAUDE_DOCKER_CMD} --model "${MODEL}" --dangerously-skip-permissions --continue "${@}" || \
 	# shellcheck disable=SC2090
