@@ -67,9 +67,9 @@ ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_creden
 # SSH Agent forwarding for git operations
 SSH_AUTH_MOUNT=""
 if [ "${CONTAINER_RUNTIME}" = "podman" ]; then
-	# Podman 4.4+ supports native SSH agent forwarding via --ssh=default
-	# This works seamlessly across the VM boundary on macOS
-	SSH_AUTH_MOUNT="--ssh=default"
+	# Podman on macOS cannot mount host SSH sockets due to VM boundary.
+	# SSH socket mounting is skipped for Podman. Use 'gh' for git operations instead.
+	SSH_AUTH_MOUNT=""
 else
 	# Docker: mount the SSH auth socket directly
 	SSH_AUTH_SOCK=${SSH_AUTH_SOCK:-}

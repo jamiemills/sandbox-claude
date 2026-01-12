@@ -21,10 +21,11 @@ Claude Sandbox encapsulates Claude Code and its dependencies in a Docker contain
 
 ### Prerequisites
 
-- **Docker** (with Daemon running) or **Podman 4.4+** (for SSH agent forwarding support)
+- **Docker** (with Daemon running) or **Podman**
 - Bash shell
 - Google Application Default Credentials (optional, for Vertex AI)
-- SSH keys configured for GitHub (optional, for git operations)
+- SSH keys configured for GitHub (optional, for git operations with Docker)
+- GitHub token for `gh` CLI (optional, required for git operations with Podman)
 
 ### Build the Image
 
@@ -84,7 +85,21 @@ To use Podman as your container runtime:
 MODEL=haiku CONTAINER_RUNTIME=podman ./claude-sandbox.sh
 ```
 
-**SSH Agent Forwarding:** Podman 4.4+ uses native SSH agent forwarding via the `--ssh=default` flag. This works transparently on macOS (including Podman Desktop and Lima) and automatically forwards your SSH agent into the container without socket mounting issues. Git operations requiring SSH authentication (e.g., `git clone git@github.com:...`) work seamlessly inside the container.
+**Important: Git Operations with Podman**
+
+Podman on macOS runs in a virtual machine and cannot mount the host's SSH auth socket. As a result, SSH-based git operations (e.g., `git clone git@github.com:...`) will not work inside Podman containers.
+
+**Workaround:** Use `gh` CLI commands for git operations instead:
+
+```bash
+# Inside container with Podman
+gh repo clone owner/repo                # Clone a repository
+gh pr create --title "My PR"            # Create a pull request
+gh issue list                           # List issues
+git push                                # Push via HTTPS (set up via gh)
+```
+
+The GitHub CLI is pre-installed and uses your host's authentication. Ensure you have set up GitHub CLI on your host with `gh auth login` first.
 
 ## How It Works
 
