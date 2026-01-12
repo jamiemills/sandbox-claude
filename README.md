@@ -501,9 +501,38 @@ If the container exists but `--continue` fails (corrupted state), the script aut
 
 ## Development
 
+### Building the Docker Image
+
+**Quick build (both Docker and Podman):**
+
+```bash
+./build.sh
+```
+
+This script:
+- Stops all running containers using the `claude_sandbox` image
+- Removes stopped containers to clean up old artifacts
+- Rebuilds both Docker and Podman images with `--no-cache` to pick up all changes
+
+**Manual builds:**
+
+```bash
+# Docker only
+docker build -f docker/Dockerfile -t claude_sandbox .
+
+# Podman only
+podman build -f docker/Dockerfile -t claude_sandbox .
+```
+
 ### Adding Tools to the Container
 
 Modify `docker/Dockerfile` and add `apt-get install` commands in the system dependencies section, then rebuild:
+
+```bash
+./build.sh
+```
+
+Or manually:
 
 ```bash
 docker build -f docker/Dockerfile -t claude_sandbox .
