@@ -1,3 +1,4 @@
 .config/
 .claude/
 CLAUDE.md
+.application_default_credentials.json
