@@ -12,7 +12,7 @@ Claude Sandbox encapsulates Claude Code and its dependencies in a Docker contain
 - **Session persistence** — Named containers resume where you left off
 - **Credential isolation** — Read-only mounting of sensitive credentials (Google Cloud, SSH keys)
 - **Smart mount strategy** — Automatically detects git repositories and mounts intelligently
-- **SSH agent forwarding** — Secure git operations without passing private keys
+- **Secure SSH for git** — SSH keys mounted read-only; no passphrases required
 - **State preservation** — Claude memory and todo lists persist across sessions
 - **Non-root execution** — Runs as unprivileged user for enhanced security
 - **Health checks** — Built-in container health verification
@@ -130,7 +130,7 @@ Credentials are securely mounted with careful attention to read/write permission
 
 **Note on ADC path:** Google Cloud credentials mount within your workspace. In a git repository, that's `<repo-name>/.config/gcloud/...`; outside a repository, it's `workspace/.config/gcloud/...`. The `GOOGLE_APPLICATION_CREDENTIALS` environment variable is automatically set to point to the correct location.
 
-**Note on SSH keys:** Individual SSH key files from `~/.ssh` are mounted read-only into the container. The entrypoint script automatically fixes file permissions to 600 (required by SSH) before Claude Code starts. This works for both Docker and Podman without socket forwarding issues. A clean SSH config is generated in the container for GitHub connectivity.
+**Note on SSH keys:** Individual SSH key files from `~/.ssh` are mounted read-only into the container. SSH keys with passphrases will not work in containers (no TTY for passphrase prompts). Remove your SSH key's passphrase before using with containers: `ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<passphrase>"`. A clean SSH config is generated in the container for GitHub connectivity. This works for both Docker and Podman.
 
 **Note on git configuration:** Your host's `~/.gitconfig` is mounted read-only, ensuring your git user identity (name and email) is available for commits without risk of accidental modification.
 
@@ -253,17 +253,6 @@ The container includes built-in health checks that verify Claude Code is functio
 
 These health checks ensure your container is always in a reliable state. Docker automatically restarts unhealthy containers based on restart policies.
 
-### SSH Key Permission Management
-
-SSH requires private key files to have strict `600` permissions (owner read/write only). When SSH keys are mounted from the host, they preserve host permissions which may be too permissive.
-
-The container uses a custom entrypoint script (`.entrypoint.sh`) that automatically:
-1. Fixes SSH key file permissions to 600 before Claude Code starts
-2. Gracefully handles missing keys (no error if no keys exist)
-3. Passes all arguments through to Claude Code
-
-This ensures SSH authentication works immediately upon container startup without "UNPROTECTED PRIVATE KEY FILE" warnings, regardless of host key permissions.
-
 ## Directory Structure
 
 ```
@@ -311,27 +300,28 @@ ls -la ~/.ssh
 
 ### SSH authentication fails inside container
 
-Ensure SSH agent is running on the host:
+SSH keys with passphrases will not work in containers because there's no TTY for passphrase prompts.
+
+**Solution: Remove your SSH key's passphrase**
+
+On your host machine:
 
 ```bash
-# Check if agent is running
-echo $SSH_AUTH_SOCK
-
-# If empty, start the agent
-eval $(ssh-agent -s)
-
-# Add your SSH key (replace with your key path)
-ssh-add ~/.ssh/id_rsa      # or id_ed25519, id_ecdsa, etc.
+ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<your_current_passphrase>"
 ```
 
-Inside the container, verify SSH is working:
+Replace:
+- `~/.ssh/id_ed25519` with your key path (e.g., `~/.ssh/id_rsa`)
+- `<your_current_passphrase>` with your actual passphrase
+
+Then inside the container, verify SSH is working:
 
 ```bash
 # Inside container
 ssh -T git@github.com
 ```
 
-This should authenticate without prompting for a password.
+This should authenticate without prompting.
 
 ### Container won't start
 
