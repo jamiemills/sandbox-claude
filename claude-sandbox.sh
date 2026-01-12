@@ -3,7 +3,7 @@
 
 #
 # Run Claude Code in a containerised sandbox environment. Supports Docker and Podman.
-# See https://docs.docker.com/ai/sandboxes/ for more information.
+# Inspired by docker sandbox; See https://docs.docker.com/ai/sandboxes/ for more information.
 #
 # Required environment variables:
 #   MODEL - The Claude model to use (e.g., haiku, opus). Example: MODEL=haiku ./claude-sandbox.sh
