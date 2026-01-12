@@ -121,13 +121,16 @@ Credentials are securely mounted with careful attention to read/write permission
 | Credential | Host Location | Container Path | Purpose | Read-Only |
 |---|---|---|---|---|
 | **Google Cloud ADC** | `~/.config/gcloud/application_default_credentials.json` | `<workspace>/.config/gcloud/...` | Vertex AI access | ✓ |
-| **SSH keys** | Via `SSH_AUTH_SOCK` | Socket forwarded | Git operations | ✓ |
+| **SSH keys** | `~/.ssh/id_*` (individual key files) | `/home/agent/.ssh/id_*` | Git SSH operations | ✓ |
+| **SSH config** | Generated in container | `/home/agent/.ssh/config` | GitHub SSH settings | ✗ |
 | **Claude state** | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
 | **Git config** | `~/.gitconfig` | `/home/agent/.gitconfig` | User identity | ✓ |
 | **GitHub CLI config** | `~/.config/gh` | `/home/agent/.config/gh` | gh authentication | ✗ |
 | **GitHub token** | Via `~/.claude/.env` | `GH_TOKEN` env var | gh API access | N/A |
 
 **Note on ADC path:** Google Cloud credentials mount within your workspace. In a git repository, that's `<repo-name>/.config/gcloud/...`; outside a repository, it's `workspace/.config/gcloud/...`. The `GOOGLE_APPLICATION_CREDENTIALS` environment variable is automatically set to point to the correct location.
+
+**Note on SSH keys:** Individual SSH key files from `~/.ssh` are mounted read-only into the container. The entrypoint script automatically fixes file permissions to 600 (required by SSH) before Claude Code starts. This works for both Docker and Podman without socket forwarding issues. A clean SSH config is generated in the container for GitHub connectivity.
 
 **Note on git configuration:** Your host's `~/.gitconfig` is mounted read-only, ensuring your git user identity (name and email) is available for commits without risk of accidental modification.
 
@@ -249,6 +252,17 @@ The container includes built-in health checks that verify Claude Code is functio
 - **Retry threshold:** 3 consecutive failures before marking unhealthy
 
 These health checks ensure your container is always in a reliable state. Docker automatically restarts unhealthy containers based on restart policies.
+
+### SSH Key Permission Management
+
+SSH requires private key files to have strict `600` permissions (owner read/write only). When SSH keys are mounted from the host, they preserve host permissions which may be too permissive.
+
+The container uses a custom entrypoint script (`.entrypoint.sh`) that automatically:
+1. Fixes SSH key file permissions to 600 before Claude Code starts
+2. Gracefully handles missing keys (no error if no keys exist)
+3. Passes all arguments through to Claude Code
+
+This ensures SSH authentication works immediately upon container startup without "UNPROTECTED PRIVATE KEY FILE" warnings, regardless of host key permissions.
 
 ## Directory Structure
 
