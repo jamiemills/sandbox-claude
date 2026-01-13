@@ -212,7 +212,7 @@ Credentials are securely mounted with careful attention to read/write permission
 |---|---|---|---|---|
 | **Google Cloud ADC** | `~/.config/gcloud/application_default_credentials.json` | `<workspace>/.config/gcloud/...` | Vertex AI access | ✓ |
 | **SSH key** | `$KEYFILE` (specified via env var) | `/home/agent/.ssh/<keyname>` | Git SSH operations | ✓ |
-| **SSH config** | Generated in container | `/home/agent/.ssh/config` | GitHub SSH settings | ✗ |
+| **SSH config** | Auto-generated in container | `/home/agent/.ssh/config` | GitHub SSH settings | ✗ |
 | **Claude state** | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
 | **Git config** | `~/.gitconfig` | `/home/agent/.gitconfig` | User identity | ✓ |
 | **GitHub CLI config** | `~/.config/gh` | `/home/agent/.config/gh` | gh authentication | ✗ |
@@ -222,11 +222,11 @@ Credentials are securely mounted with careful attention to read/write permission
 
 **Note on SSH keys:** The SSH key file specified by the `KEYFILE` environment variable is mounted read-only into the container. You must set `KEYFILE` to the path of your SSH key (e.g., `KEYFILE=~/.ssh/id_ed25519`).
 
+**Note on SSH config:** The container automatically generates an SSH configuration for GitHub at startup. Custom SSH hosts from your host's `~/.ssh/config` are not included in the container — only GitHub SSH connectivity is configured. This works for both Docker and Podman.
+
 **Passphrase-protected keys:** If your SSH key has a passphrase, use the SSH agent relay to access it securely in containers (see "Using SSH Keys with Passphrases" in Quick Start). The relay caches your passphrase on the host and bridges access to the container via TCP, so the passphrase never enters the container.
 
 **Passphrase-free keys:** If you prefer not to use the relay, you can remove your SSH key's passphrase: `ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<passphrase>"`.
-
-A clean SSH config is automatically generated in the container for GitHub connectivity. This works for both Docker and Podman.
 
 **Note on git configuration:** Your host's `~/.gitconfig` is mounted read-only, ensuring your git user identity (name and email) is available for commits without risk of accidental modification.
 

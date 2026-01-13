@@ -17,6 +17,15 @@
 #   ANTHROPIC_VERTEX_PROJECT_ID - GCP project ID
 #
 
+# Cleanup function for temporary files
+# shellcheck disable=SC2329
+cleanup() {
+	# Remove temporary SSH config if it exists (legacy cleanup)
+	[ -f ~/.ssh/config.container ] && rm -f ~/.ssh/config.container
+}
+
+trap cleanup EXIT
+
 # Source environment file if it exists (for GH_TOKEN and other secrets)
 if [ -f ~/.claude/.env ]; then
 	# shellcheck source=/dev/null
@@ -29,6 +38,12 @@ if [ -z "${MODEL}" ]; then
 	exit 1
 fi
 
+# Validate KEYFILE environment variable is set
+if [ -z "${KEYFILE}" ]; then
+	echo "Error: KEYFILE environment variable not set. Usage: KEYFILE=~/.ssh/id_ed25519 MODEL=haiku ./claude-sandbox.sh"
+	exit 1
+fi
+
 # Set container runtime (default: docker, can be overridden with CONTAINER_RUNTIME env var)
 CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
 
@@ -37,17 +52,6 @@ if ! command -v "${CONTAINER_RUNTIME}" &>/dev/null; then
 	echo "Error: ${CONTAINER_RUNTIME} not found. Please install it."
 	exit 1
 fi
-
-# SSH Key Setup for Podman
-# For SSH keys with passphrases: Remove the passphrase before using in containers.
-# SSH agent socket forwarding doesn't work reliably across Podman's VM boundary on macOS.
-# Use passphrase-free keys for container SSH operations. The key file permissions
-# are protected by the container's read-only mount and non-root user execution.
-#
-# To remove passphrase from an SSH key:
-#   ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<current_passphrase>"
-#
-# See .claude/CLAUDE.md for full SSH setup documentation.
 
 # Determine mount strategy based on whether we're in a git repo
 if git rev-parse --git-dir >/dev/null 2>&1; then
@@ -79,19 +83,13 @@ ADC_SOURCE=$HOME/.config/gcloud/application_default_credentials.json
 ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_credentials.json
 
 # SSH key forwarding for git operations
-# Mount SSH keys directly (but not config) to avoid platform-specific issues
-# Keys are regular files that work across VM boundaries and socket forwarding issues
-# Only mount key files to prevent host SSH config (which may contain platform-specific options
-# like "usekeychain" for macOS) from interfering with container SSH
+# Mount SSH keys specified by KEYFILE environment variable
+# Container generates its own GitHub-only SSH config at startup
 SSH_AUTH_MOUNT=""
-# Mount private keys if they exist
-[ -f "$HOME/.ssh/id_rsa" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_rsa:/home/agent/.ssh/id_rsa:ro"
-[ -f "$HOME/.ssh/id_ed25519" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519:/home/agent/.ssh/id_ed25519:ro"
-[ -f "$HOME/.ssh/id_ecdsa" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa:/home/agent/.ssh/id_ecdsa:ro"
-# Mount public keys if they exist
-[ -f "$HOME/.ssh/id_rsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_rsa.pub:/home/agent/.ssh/id_rsa.pub:ro"
-[ -f "$HOME/.ssh/id_ed25519.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ed25519.pub:/home/agent/.ssh/id_ed25519.pub:ro"
-[ -f "$HOME/.ssh/id_ecdsa.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v $HOME/.ssh/id_ecdsa.pub:/home/agent/.ssh/id_ecdsa.pub:ro"
+# Mount private key if it exists (destination path must be absolute)
+[ -f "${KEYFILE}" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v ${KEYFILE}:/home/agent/.ssh/$(basename "${KEYFILE}"):ro"
+# Mount public key if it exists
+[ -f "${KEYFILE}.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v ${KEYFILE}.pub:/home/agent/.ssh/$(basename "${KEYFILE}").pub:ro"
 
 # Claude state directory mount (includes memory file and todos) - read-write
 CLAUDE_STATE_SOURCE=$HOME/.claude
@@ -133,6 +131,7 @@ else
     -e EDITOR=vim \
     -e GH_TOKEN=${GH_TOKEN:-} \
     -e SSH_AGENT_RELAY_PORT=6010 \
+    -e SSH_AUTH_SOCK=/tmp/ssh-agent-relay-dir/ssh-agent \
     ${WORKSPACE_MOUNT} \
     -v ${ADC_SOURCE}:${ADC_IN_CONTAINER}:ro \
     --tmpfs /tmp:rw,noexec,nosuid,size=1g \
