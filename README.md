@@ -61,18 +61,20 @@ Do not mix runtimes (e.g., Docker build with Podman run) — the container runti
 
 ### Run Claude Code
 
-The `MODEL` environment variable is **required**:
+Two environment variables are **required**:
 
 ```bash
-MODEL=haiku ./claude-sandbox.sh
+MODEL=haiku KEYFILE=~/.ssh/id_ed25519 ./claude-sandbox.sh
 ```
 
-Supported models: `haiku`, `sonnet`, `opus`, or any valid Claude model identifier.
+**Required variables:**
+- `MODEL` — The Claude model to use (`haiku`, `sonnet`, `opus`, or any valid Claude model identifier)
+- `KEYFILE` — The SSH key file to use for git operations (e.g., `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`)
 
 The script automatically:
 - Detects whether you're in a git repository
 - Mounts your project at an appropriate location
-- Forwards SSH credentials for git operations
+- Mounts the SSH key specified by `KEYFILE` for git operations
 - Passes Google Cloud credentials for Vertex AI access
 - Connects to the SSH agent relay (if running) for passphrase-protected keys
 - Resumes previous sessions or starts a new one
@@ -93,14 +95,14 @@ Examples:
 
 ```bash
 # First run: Creates tmux session and attaches
-MODEL=haiku ./claude-sandbox.sh
+MODEL=haiku KEYFILE=~/.ssh/id_ed25519 ./claude-sandbox.sh
 
 # In the container, work as usual. When you want to exit:
 # Press Ctrl+B then D to detach (keeps container running)
 
 # Later, reconnect to the running session:
 # Option 1: Run the same command again
-MODEL=haiku ./claude-sandbox.sh
+MODEL=haiku KEYFILE=~/.ssh/id_ed25519 ./claude-sandbox.sh
 
 # Option 2: Attach directly using tmux
 tmux attach -t docker-claude-sandbox-claude
@@ -124,15 +126,15 @@ If your SSH key has a passphrase, you can use it in containers without removing 
 
 **One-time setup per session:**
 
-1. Start the SSH agent relay in a tmux session:
+1. Start the SSH agent relay in a tmux session, specifying the SSH key:
    ```bash
-   tmux new-session -d -s ssh-relay './start-ssh-agent-relay.sh'
+   KEYFILE=~/.ssh/id_ed25519 tmux new-session -d -s ssh-relay './start-ssh-agent-relay.sh'
    ```
    The relay script automatically caches your passphrase and starts the relay on port 6010.
 
-2. Start Claude Code normally:
+2. Start Claude Code with the same SSH key:
    ```bash
-   MODEL=haiku ./claude-sandbox.sh
+   MODEL=haiku KEYFILE=~/.ssh/id_ed25519 ./claude-sandbox.sh
    ```
 
 Inside the container, SSH operations work without prompting for a passphrase:
@@ -169,10 +171,10 @@ Replace `/path/to/sandbox-claude` with the actual path to your repository. This 
 To use Podman as your container runtime:
 
 ```bash
-MODEL=haiku CONTAINER_RUNTIME=podman ./claude-sandbox.sh
+MODEL=haiku KEYFILE=~/.ssh/id_ed25519 CONTAINER_RUNTIME=podman ./claude-sandbox.sh
 ```
 
-SSH git operations work seamlessly with Podman. Your SSH keys from `~/.ssh` are mounted read-only into the container, enabling native git SSH operations (e.g., `git clone git@github.com:...`, `git push`, etc.) for any repository.
+SSH git operations work seamlessly with Podman. Your SSH key specified by `KEYFILE` is mounted read-only into the container, enabling native git SSH operations (e.g., `git clone git@github.com:...`, `git push`, etc.) for any repository.
 
 ## How It Works
 
@@ -209,7 +211,7 @@ Credentials are securely mounted with careful attention to read/write permission
 | Credential | Host Location | Container Path | Purpose | Read-Only |
 |---|---|---|---|---|
 | **Google Cloud ADC** | `~/.config/gcloud/application_default_credentials.json` | `<workspace>/.config/gcloud/...` | Vertex AI access | ✓ |
-| **SSH keys** | `~/.ssh/id_*` (individual key files) | `/home/agent/.ssh/id_*` | Git SSH operations | ✓ |
+| **SSH key** | `$KEYFILE` (specified via env var) | `/home/agent/.ssh/<keyname>` | Git SSH operations | ✓ |
 | **SSH config** | Generated in container | `/home/agent/.ssh/config` | GitHub SSH settings | ✗ |
 | **Claude state** | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
 | **Git config** | `~/.gitconfig` | `/home/agent/.gitconfig` | User identity | ✓ |
@@ -218,7 +220,7 @@ Credentials are securely mounted with careful attention to read/write permission
 
 **Note on ADC path:** Google Cloud credentials mount within your workspace. In a git repository, that's `<repo-name>/.config/gcloud/...`; outside a repository, it's `workspace/.config/gcloud/...`. The `GOOGLE_APPLICATION_CREDENTIALS` environment variable is automatically set to point to the correct location.
 
-**Note on SSH keys:** Individual SSH key files from `~/.ssh` are mounted read-only into the container.
+**Note on SSH keys:** The SSH key file specified by the `KEYFILE` environment variable is mounted read-only into the container. You must set `KEYFILE` to the path of your SSH key (e.g., `KEYFILE=~/.ssh/id_ed25519`).
 
 **Passphrase-protected keys:** If your SSH key has a passphrase, use the SSH agent relay to access it securely in containers (see "Using SSH Keys with Passphrases" in Quick Start). The relay caches your passphrase on the host and bridges access to the container via TCP, so the passphrase never enters the container.
 
@@ -397,16 +399,22 @@ ls -la ~/.ssh
 
 ### SSH authentication fails inside container
 
+First, ensure you've set the `KEYFILE` environment variable to point to your SSH key:
+
+```bash
+MODEL=haiku KEYFILE=~/.ssh/id_ed25519 ./claude-sandbox.sh
+```
+
 **For passphrase-protected keys:**
 
 Use the SSH agent relay to securely use password-protected keys in containers:
 
 ```bash
 # On host: Start relay in tmux (caches passphrase automatically)
-tmux new-session -d -s ssh-relay './start-ssh-agent-relay.sh'
+KEYFILE=~/.ssh/id_ed25519 tmux new-session -d -s ssh-relay './start-ssh-agent-relay.sh'
 
 # Start container (relay provides SSH agent access)
-MODEL=haiku ./claude-sandbox.sh
+MODEL=haiku KEYFILE=~/.ssh/id_ed25519 ./claude-sandbox.sh
 
 # Inside container: SSH works without passphrase prompt
 ssh -T git@github.com
