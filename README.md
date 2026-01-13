@@ -214,7 +214,7 @@ Credentials are securely mounted with careful attention to read/write permission
 | **SSH key** | `$KEYFILE` (specified via env var) | `/home/agent/.ssh/<keyname>` | Git SSH operations | ✓ |
 | **SSH config** | Auto-generated in container | `/home/agent/.ssh/config` | GitHub SSH settings | ✗ |
 | **Claude state** | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
-| **Git config** | `~/.gitconfig` | `/home/agent/.gitconfig` | User identity | ✓ |
+| **Git config** | Baked into image (`.sandbox.gitconfig`) | `/home/agent/.gitconfig` | Sandbox identity | ✗ |
 | **GitHub CLI config** | `~/.config/gh` | `/home/agent/.config/gh` | gh authentication | ✗ |
 | **GitHub token** | Via `~/.claude/.env` | `GH_TOKEN` env var | gh API access | N/A |
 
@@ -228,7 +228,7 @@ Credentials are securely mounted with careful attention to read/write permission
 
 **Passphrase-free keys:** If you prefer not to use the relay, you can remove your SSH key's passphrase: `ssh-keygen -p -f ~/.ssh/id_ed25519 -N "" -P "<passphrase>"`.
 
-**Note on git configuration:** Your host's `~/.gitconfig` is mounted read-only, ensuring your git user identity (name and email) is available for commits without risk of accidental modification.
+**Note on git configuration:** The container uses `.sandbox.gitconfig` which is baked into the Docker image. This isolates the sandbox from your host's git configuration, ensuring commits use the sandbox's configured identity (Jamie Mills / j6l288q4@1yz.xyz).
 
 ### Session Persistence & Resilience
 
@@ -258,16 +258,9 @@ export ANTHROPIC_VERTEX_PROJECT_ID=my-project-id  # GCP project
 
 ### Credential Configuration
 
-**Git Configuration:** Your host's `~/.gitconfig` is automatically mounted read-only into the container, so your git user identity (name and email) is available for commits.
-
-If you don't have a global git config on your host, you can set one:
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"
-```
-
 **Google Cloud Credentials:** If you want to use Vertex AI, ensure `~/.config/gcloud/application_default_credentials.json` exists on your host. See "Credential Handling" in the "How It Works" section for details.
+
+**Git Configuration:** The container uses `.sandbox.gitconfig` which is included in the Docker image. To customise the git identity or settings for the sandbox, edit `.sandbox.gitconfig` in the repository root and rebuild the Docker image with `./build.sh`.
 
 **GitHub Token:** See "GitHub CLI (gh) Configuration" below for GitHub token setup.
 

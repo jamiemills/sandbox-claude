@@ -99,10 +99,6 @@ CLAUDE_STATE_CONTAINER=/home/agent/.claude
 GH_CONFIG_SOURCE=$HOME/.config/gh
 GH_CONFIG_CONTAINER=/home/agent/.config/gh
 
-# Git configuration mount (allows git config persistence)
-GITCONFIG_SOURCE=$HOME/.gitconfig
-GITCONFIG_CONTAINER=/home/agent/.gitconfig
-
 # Check if tmux session already exists
 if tmux has-session -t "${TMUX_SESSION}" 2>/dev/null; then
 	# Session exists, attach to it
@@ -137,7 +133,6 @@ else
     --tmpfs /tmp:rw,noexec,nosuid,size=1g \
     -v ${CLAUDE_STATE_SOURCE}:${CLAUDE_STATE_CONTAINER} \
     -v ${GH_CONFIG_SOURCE}:${GH_CONFIG_CONTAINER} \
-    -v ${GITCONFIG_SOURCE}:${GITCONFIG_CONTAINER}:ro \
     ${SSH_AUTH_MOUNT} \
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
