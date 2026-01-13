@@ -11,8 +11,14 @@
 
 set -e
 
+# Validate KEYFILE environment variable is set
+if [ -z "${KEYFILE}" ]; then
+	echo "Error: KEYFILE environment variable not set. Usage: KEYFILE=~/.ssh/id_ed25519 $0"
+	exit 1
+fi
+
 # cache the passphrase
-ssh-add ~/.ssh/id_ed25519
+ssh-add "${KEYFILE}"
 
 # Find the SSH agent socket
 if [ -z "$SSH_AUTH_SOCK" ]; then
