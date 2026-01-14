@@ -54,6 +54,18 @@ RUN echo 'alias pip="uv pip"' >> ~/.bashrc && \
     echo '# Set SSH_AUTH_SOCK for relay support if running in relay mode' >> ~/.bashrc && \
     echo 'if [ -S /tmp/ssh-agent-relay-dir/ssh-agent ]; then' >> ~/.bashrc && \
     echo '  export SSH_AUTH_SOCK=/tmp/ssh-agent-relay-dir/ssh-agent' >> ~/.bashrc && \
+    echo 'fi' >> ~/.bashrc && \
+    echo '' >> ~/.bashrc && \
+    echo '# Track working directory changes for Claude Code session persistence' >> ~/.bashrc && \
+    echo '# This allows cd commands to persist within a Claude Code session' >> ~/.bashrc && \
+    echo 'export CLAUDE_CWD="$PWD"' >> ~/.bashrc && \
+    echo 'cd() { builtin cd "$@" && export CLAUDE_CWD="$PWD" && echo "$PWD" > ~/.claude_session_cwd; }' >> ~/.bashrc && \
+    echo '# Restore previous directory if in a Claude Code command' >> ~/.bashrc && \
+    echo 'if [ -f ~/.claude_session_cwd ]; then' >> ~/.bashrc && \
+    echo '  _CWD_TO_RESTORE=$(cat ~/.claude_session_cwd)' >> ~/.bashrc && \
+    echo '  if [ -d "$_CWD_TO_RESTORE" ]; then' >> ~/.bashrc && \
+    echo '    builtin cd "$_CWD_TO_RESTORE"' >> ~/.bashrc && \
+    echo '  fi' >> ~/.bashrc && \
     echo 'fi' >> ~/.bashrc
 
 # Create SSH directory (config will be generated dynamically by entrypoint)
