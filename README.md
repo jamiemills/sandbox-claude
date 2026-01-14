@@ -216,11 +216,13 @@ Credentials are securely mounted with careful attention to read/write permission
 | **Claude state** | `~/.claude` | `/home/agent/.claude` | Memory and todos | ✗ |
 | **Git config** | Baked into image (`.sandbox.gitconfig`) | `/home/agent/.gitconfig` | Sandbox identity | ✗ |
 | **GitHub CLI config** | `~/.config/gh` | `/home/agent/.config/gh` | gh authentication | ✗ |
-| **GitHub token** | Via `~/.claude/.env` | `GH_TOKEN` env var | gh API access | N/A |
+| **GitHub token mapping** | `.sandbox.ghtoken` (repo root) | `/home/agent/.ghtoken` | Dynamic GH_TOKEN lookup | ✓ |
 
 **Note on ADC path:** Google Cloud credentials mount within your workspace. In a git repository, that's `<repo-name>/.config/gcloud/...`; outside a repository, it's `workspace/.config/gcloud/...`. The `GOOGLE_APPLICATION_CREDENTIALS` environment variable is automatically set to point to the correct location.
 
 **Note on SSH keys:** The SSH key file specified by the `KEYFILE` environment variable is mounted read-only into the container. You must set `KEYFILE` to the path of your SSH key (e.g., `KEYFILE=~/.ssh/id_ed25519`).
+
+**Note on GitHub token mapping:** If you want to use `gh` CLI API commands (e.g., `gh pr create`, `gh issue list`), create a `.sandbox.ghtoken` file in the repository root with SSH key to GitHub token mappings. Format: `keyname|token` (one per line). The entrypoint script automatically detects your mounted KEYFILE and looks up the token. This isolates gh credentials to specific SSH keys. If no mapping is found, `GH_TOKEN` is unset and gh commands requiring authentication will fail gracefully.
 
 **Note on SSH config:** The container automatically generates an SSH configuration for GitHub at startup. Custom SSH hosts from your host's `~/.ssh/config` are not included in the container — only GitHub SSH connectivity is configured. This works for both Docker and Podman.
 
@@ -283,28 +285,39 @@ The container aliases `pip` to `uv pip` for Python package management.
 
 ### GitHub CLI (gh) Configuration
 
-The container includes GitHub CLI (`gh`) with pre-configured SSH authentication. Your host's gh configuration is automatically mounted into the container for persistence.
+The container includes GitHub CLI (`gh`) with pre-configured SSH authentication and automatic token mapping based on your SSH keys.
 
 #### Setup
 
-Create a `.env` file with your GitHub token (one-time setup):
+Create a `.sandbox.ghtoken` file to map your SSH keys to GitHub tokens (one-time setup):
 
 ```bash
-cat > ~/.claude/.env << 'EOF'
-# GitHub token for gh CLI API access
-export GH_TOKEN=$(gh auth token)
+cat > .sandbox.ghtoken << 'EOF'
+# Format: keyname|token
+# The keyname is the basename of your SSH key file
+# Example: if KEYFILE=~/.ssh/id_ed25519, use id_ed25519
+id_ed25519|ghp_your_token_here
+id_rsa|ghp_another_token_here
 EOF
-chmod 600 ~/.claude/.env
+chmod 600 .sandbox.ghtoken
 ```
 
-The script automatically sources `~/.claude/.env` before starting the container, passing the token securely without exposing it in process listings.
+Replace:
+- `id_ed25519` with your actual SSH key filename (basename only, e.g. `id_ed25519` or `id_rsa`)
+- `ghp_your_token_here` with your GitHub personal access token
+
+The container automatically detects your mounted `KEYFILE` and looks up the corresponding token in `.sandbox.ghtoken`. If found, it sets `GH_TOKEN` for gh API commands.
+
+**Security note:** `.sandbox.ghtoken` is listed in `.gitignore` to prevent accidental commits of tokens.
 
 #### How It Works
 
-- Your `~/.config/gh` directory is mounted read-write into the container
-- SSH authentication is forwarded from your host's SSH agent for git operations
-- GitHub token is passed via environment variable for API access
-- Configuration persists across container restarts
+- When the container starts with `KEYFILE=~/.ssh/id_ed25519`, the entrypoint script detects the key filename
+- It looks up `id_ed25519|...` in the `.sandbox.ghtoken` mapping file
+- If found, `GH_TOKEN` is automatically set to the token
+- If not found, `GH_TOKEN` is unset (gh commands requiring authentication will fail gracefully)
+- Your `~/.config/gh` directory is mounted read-write for configuration persistence
+- All gh commands use SSH authentication for git operations
 
 #### Using gh in the Container
 
@@ -316,21 +329,30 @@ gh issue list
 gh repo clone owner/repo
 ```
 
-All gh commands work seamlessly using your host's authentication and configuration.
+All gh commands work seamlessly using your SSH key for git operations and your mapped token for API access.
 
 #### Troubleshooting
 
 If gh commands fail:
 
 ```bash
+# Check if GH_TOKEN is set
+echo $GH_TOKEN
+
 # Check gh auth status in container
 gh auth status
 
 # Check SSH authentication
 ssh -T git@github.com
+
+# Verify .sandbox.ghtoken exists and is mounted
+cat ~/.ghtoken
 ```
 
-Both should work without prompts.
+Common issues:
+- **gh API commands fail:** Ensure `.sandbox.ghtoken` exists and contains the correct mapping for your KEYFILE
+- **SSH fails:** Ensure your SSH key (specified by KEYFILE) is correct and in `~/.ssh/`
+- **Token not recognised:** Verify the format is `keyname|token` with no spaces, and the keyname matches your SSH key filename (basename only)
 
 ### Container Health Checks
 
