@@ -13,5 +13,6 @@ docker rm "$(docker ps -a --filter "ancestor=claude_sandbox" --format "{{.ID}}")
 # Rebuild both container runtimes with --no-cache to ensure all layers are rebuilt fresh.
 # This guarantees any Dockerfile changes, dependency updates, or package changes are picked up
 # rather than using stale cached layers from previous builds.
-podman build --no-cache -t claude_sandbox:latest docker/
-docker build --no-cache -t claude_sandbox:latest docker/
+# Build context is repo root (.) so that COPY directives can access files like .sandbox.gitconfig
+podman build --no-cache -f docker/Dockerfile -t claude_sandbox:latest .
+docker build --no-cache -f docker/Dockerfile -t claude_sandbox:latest .

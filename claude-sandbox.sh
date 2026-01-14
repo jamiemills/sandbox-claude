@@ -48,24 +48,24 @@ if ! command -v "${CONTAINER_RUNTIME}" &>/dev/null; then
 fi
 
 # Determine mount strategy based on whether we're in a git repo
+CURRENT_DIR=$(pwd)
+DIR_HASH=$(echo -n "${CURRENT_DIR}" | sha256sum | cut -c1-8)
+
 if git rev-parse --git-dir >/dev/null 2>&1; then
 	# In a repo: mount repo root at /home/agent/<repo-name>
 	REPO_ROOT=$(git rev-parse --show-toplevel)
 	REPO_NAME=$(basename "${REPO_ROOT}")
-	CURRENT_DIR=$(pwd)
 	RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('${CURRENT_DIR}', '${REPO_ROOT}'))")
 	CONTAINER_WORKDIR="/home/agent/${REPO_NAME}/${RELATIVE_PATH}"
 	# Mount repo root with repo name
 	WORKSPACE_MOUNT="-v ${REPO_ROOT}:/home/agent/${REPO_NAME}"
-	# Container name based on repo
-	CONTAINER_NAME="claude-${REPO_NAME}"
+	# Container name based on repo name + directory hash (for directory isolation)
+	CONTAINER_NAME="claude-${REPO_NAME}-${DIR_HASH}"
 else
 	# Not in a repo: mount current directory as workspace
-	CURRENT_DIR=$(pwd)
 	CONTAINER_WORKDIR="/home/agent/workspace"
 	WORKSPACE_MOUNT="-v ${CURRENT_DIR}:/home/agent/workspace"
 	# Container name based on current directory hash
-	DIR_HASH=$(echo -n "${CURRENT_DIR}" | sha256sum | cut -c1-8)
 	CONTAINER_NAME="claude-workspace-${DIR_HASH}"
 fi
 
@@ -101,7 +101,10 @@ GHTOKEN_CONTAINER=/home/agent/.ghtoken
 if tmux has-session -t "${TMUX_SESSION}" 2>/dev/null; then
 	# Session exists, attach to it
 	echo "Attaching to existing tmux session: ${TMUX_SESSION}"
-	tmux attach -t "${TMUX_SESSION}"
+	if ! tmux attach -t "${TMUX_SESSION}"; then
+		echo "Error: Failed to attach to tmux session ${TMUX_SESSION}"
+		exit 1
+	fi
 else
 	# Check if container already exists (for resume)
 	CONTAINER_EXISTS=false
@@ -136,7 +139,7 @@ else
     --group-add=root \
     --entrypoint /home/agent/.entrypoint.sh \
     claude_sandbox \
-    --model ${MODEL} --dangerously-skip-permissions --continue ${@}"
+    --model ${MODEL} --dangerously-skip-permissions ${@}"
 	fi
 
 	# Create tmux session and run container command
@@ -150,7 +153,19 @@ else
 
 	tmux new-session -d -s "${TMUX_SESSION}" "${CONTAINER_CMD}"
 	sleep 1
-	tmux attach -t "${TMUX_SESSION}"
+
+	# Validate container is running before attempting to attach
+	if ! ${CONTAINER_RUNTIME} inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
+		echo "Error: Container ${CONTAINER_NAME} failed to start"
+		echo "Check container logs for details: ${CONTAINER_RUNTIME} logs ${CONTAINER_NAME}"
+		exit 1
+	fi
+
+	# Attach to the tmux session
+	if ! tmux attach -t "${TMUX_SESSION}"; then
+		echo "Error: Failed to attach to tmux session ${TMUX_SESSION}"
+		exit 1
+	fi
 fi
 
 exit 0
