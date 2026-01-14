@@ -47,34 +47,16 @@ if ! command -v "${CONTAINER_RUNTIME}" &>/dev/null; then
 	exit 1
 fi
 
-# Determine mount strategy based on whether we're in a git repo
+# Always mount current directory as workspace
 CURRENT_DIR=$(pwd)
 DIR_HASH=$(echo -n "${CURRENT_DIR}" | sha256sum | cut -c1-8)
 
-if git rev-parse --git-dir >/dev/null 2>&1; then
-	# In a repo: mount repo root at /home/agent/<repo-name>
-	REPO_ROOT=$(git rev-parse --show-toplevel)
-	REPO_NAME=$(basename "${REPO_ROOT}")
-	RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('${CURRENT_DIR}', '${REPO_ROOT}'))")
-	CONTAINER_WORKDIR="/home/agent/${REPO_NAME}/${RELATIVE_PATH}"
-	# Mount repo root with repo name
-	WORKSPACE_MOUNT="-v ${REPO_ROOT}:/home/agent/${REPO_NAME}"
-	# Container name based on repo name + directory hash (for directory isolation)
-	CONTAINER_NAME="claude-${REPO_NAME}-${DIR_HASH}"
-else
-	# Not in a repo: mount current directory as workspace
-	CONTAINER_WORKDIR="/home/agent/workspace"
-	WORKSPACE_MOUNT="-v ${CURRENT_DIR}:/home/agent/workspace"
-	# Container name based on current directory hash
-	CONTAINER_NAME="claude-workspace-${DIR_HASH}"
-fi
+CONTAINER_WORKDIR="/workspace"
+WORKSPACE_MOUNT="-v ${CURRENT_DIR}:/workspace"
+CONTAINER_NAME="claude-${DIR_HASH}"
 
 # Create tmux session name (includes runtime)
 TMUX_SESSION="${CONTAINER_RUNTIME}-${CONTAINER_NAME}"
-
-# Mount points (credentials mounted under workspace)
-ADC_SOURCE=$HOME/.config/gcloud/application_default_credentials.json
-ADC_IN_CONTAINER=/home/agent/workspace/.config/gcloud/application_default_credentials.json
 
 # SSH key forwarding for git operations
 # Mount SSH keys specified by KEYFILE environment variable
@@ -84,18 +66,6 @@ SSH_AUTH_MOUNT=""
 [ -f "${KEYFILE}" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v ${KEYFILE}:/home/agent/.ssh/$(basename "${KEYFILE}"):ro"
 # Mount public key if it exists
 [ -f "${KEYFILE}.pub" ] && SSH_AUTH_MOUNT="$SSH_AUTH_MOUNT -v ${KEYFILE}.pub:/home/agent/.ssh/$(basename "${KEYFILE}").pub:ro"
-
-# Claude state directory mount (includes memory file and todos) - read-write
-CLAUDE_STATE_SOURCE=$HOME/.claude
-CLAUDE_STATE_CONTAINER=/home/agent/.claude
-
-# GitHub CLI configuration mount (allows gh config persistence)
-GH_CONFIG_SOURCE=$HOME/.config/gh
-GH_CONFIG_CONTAINER=/home/agent/.config/gh
-
-# GitHub token mapping mount (for KEYFILE-based authentication)
-GHTOKEN_SOURCE=$REPO_ROOT/.sandbox.ghtoken
-GHTOKEN_CONTAINER=/home/agent/.ghtoken
 
 # Check if tmux session already exists
 if tmux has-session -t "${TMUX_SESSION}" 2>/dev/null; then
@@ -124,16 +94,11 @@ else
     -e CLAUDE_CODE_USE_VERTEX=${CLAUDE_CODE_USE_VERTEX} \
     -e CLOUD_ML_REGION=${CLOUD_ML_REGION} \
     -e ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID} \
-    -e GOOGLE_APPLICATION_CREDENTIALS=${ADC_IN_CONTAINER} \
     -e EDITOR=vim \
     -e SSH_AGENT_RELAY_PORT=6010 \
     -e SSH_AUTH_SOCK=/tmp/ssh-agent-relay-dir/ssh-agent \
     ${WORKSPACE_MOUNT} \
-    -v ${ADC_SOURCE}:${ADC_IN_CONTAINER}:ro \
     --tmpfs /tmp:rw,noexec,nosuid,size=1g \
-    -v ${CLAUDE_STATE_SOURCE}:${CLAUDE_STATE_CONTAINER} \
-    -v ${GH_CONFIG_SOURCE}:${GH_CONFIG_CONTAINER} \
-    $([ -f "${GHTOKEN_SOURCE}" ] && echo "-v ${GHTOKEN_SOURCE}:${GHTOKEN_CONTAINER}:ro") \
     ${SSH_AUTH_MOUNT} \
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \
