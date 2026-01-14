@@ -47,12 +47,13 @@ if ! command -v "${CONTAINER_RUNTIME}" &>/dev/null; then
 	exit 1
 fi
 
-# Always mount current directory as workspace
+# Always mount current directory using its basename
 CURRENT_DIR=$(pwd)
+DIR_BASENAME=$(basename "${CURRENT_DIR}")
 DIR_HASH=$(echo -n "${CURRENT_DIR}" | sha256sum | cut -c1-8)
 
-CONTAINER_WORKDIR="/workspace"
-WORKSPACE_MOUNT="-v ${CURRENT_DIR}:/workspace"
+CONTAINER_WORKDIR="/${DIR_BASENAME}"
+WORKSPACE_MOUNT="-v ${CURRENT_DIR}:/${DIR_BASENAME}"
 CONTAINER_NAME="claude-${DIR_HASH}"
 
 # Create tmux session name (includes runtime)
