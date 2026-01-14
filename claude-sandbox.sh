@@ -26,12 +26,6 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Source environment file if it exists (for GH_TOKEN and other secrets)
-if [ -f ~/.claude/.env ]; then
-	# shellcheck source=/dev/null
-	source ~/.claude/.env
-fi
-
 # Validate MODEL environment variable is set
 if [ -z "${MODEL}" ]; then
 	echo "Error: MODEL environment variable not set. Usage: MODEL=haiku ./claude-sandbox.sh"
@@ -129,7 +123,6 @@ else
     -e ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID} \
     -e GOOGLE_APPLICATION_CREDENTIALS=${ADC_IN_CONTAINER} \
     -e EDITOR=vim \
-    -e GH_TOKEN=${GH_TOKEN:-} \
     -e SSH_AGENT_RELAY_PORT=6010 \
     -e SSH_AUTH_SOCK=/tmp/ssh-agent-relay-dir/ssh-agent \
     ${WORKSPACE_MOUNT} \
