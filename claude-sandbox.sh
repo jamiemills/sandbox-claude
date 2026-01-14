@@ -99,6 +99,10 @@ CLAUDE_STATE_CONTAINER=/home/agent/.claude
 GH_CONFIG_SOURCE=$HOME/.config/gh
 GH_CONFIG_CONTAINER=/home/agent/.config/gh
 
+# GitHub token mapping mount (for KEYFILE-based authentication)
+GHTOKEN_SOURCE=$REPO_ROOT/.sandbox.ghtoken
+GHTOKEN_CONTAINER=/home/agent/.ghtoken
+
 # Check if tmux session already exists
 if tmux has-session -t "${TMUX_SESSION}" 2>/dev/null; then
 	# Session exists, attach to it
@@ -133,6 +137,7 @@ else
     --tmpfs /tmp:rw,noexec,nosuid,size=1g \
     -v ${CLAUDE_STATE_SOURCE}:${CLAUDE_STATE_CONTAINER} \
     -v ${GH_CONFIG_SOURCE}:${GH_CONFIG_CONTAINER} \
+    $([ -f "${GHTOKEN_SOURCE}" ] && echo "-v ${GHTOKEN_SOURCE}:${GHTOKEN_CONTAINER}:ro") \
     ${SSH_AUTH_MOUNT} \
     -w ${CONTAINER_WORKDIR} \
     --group-add=root \

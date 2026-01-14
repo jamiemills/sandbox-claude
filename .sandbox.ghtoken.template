@@ -1,0 +1,14 @@
+# GitHub token mapping for SSH keys
+# Format: keyname|token
+# Example:
+# id_ed25519|ghp_your_token_here
+# id_ed25519_github_sandbox|ghp_another_token_here
+
+# Create ~/.sandbox.ghtoken (NOT .sandbox.ghtoken.template) with your actual tokens:
+# cat > .sandbox.ghtoken << 'EOF'
+# id_ed25519|ghp_your_token_here
+# EOF
+# chmod 600 .sandbox.ghtoken
+
+# Then add .sandbox.ghtoken to .gitignore to prevent accidental commits:
+# echo ".sandbox.ghtoken" >> .gitignore

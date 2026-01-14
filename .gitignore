@@ -2,3 +2,5 @@
 .claude/
 CLAUDE.md
 .application_default_credentials.json
+.sandbox.gitconfig
+.sandbox.ghtoken
